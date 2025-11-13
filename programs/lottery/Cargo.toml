@@ -26,11 +26,14 @@ bytemuck = { version = "^1.22.0", features = [
     "derive",
 ] }
 star_frame = { version = "0.27.0" }
+star_frame_spl = { version = "0.27.0" }
 solana-program.workspace = true
-spl-token.workspace = true
-spl-associated-token-account.workspace = true
 
 [dev-dependencies]
 codama-nodes = { version = "^0.4.0" }
 mollusk-svm = "0.7.0"
+mollusk-svm-programs-token = "0.7.0"
 solana-account = "3.0.0"
+spl-token-interface = "2.0"
+solana-program-option = "3.0"
+solana-pubkey = "2.0"

@@ -1,7 +1,10 @@
 use crate::states::*;
 use crate::*;
 use mollusk_svm::{program::keyed_account_for_system_program, result::Check, Mollusk};
+use mollusk_svm_programs_token::token;
 use solana_account::Account as SolanaAccount;
+use solana_program_option::COption;
+use spl_token_interface::state::{Account as TokenAccountData, AccountState, Mint};
 use star_frame::{client::MakeInstruction, prelude::Pubkey, program::StarFrameProgram};
 use std::collections::HashMap;
 use std::env;
@@ -15,13 +18,12 @@ fn program_path() -> String {
 
 #[test]
 fn test_initialize_lottery() -> Result<(), Box<dyn Error>> {
-    // Use absolute path to .so file
-
     let mollusk = Mollusk::new(&SolanaLotteryPoolProgram::ID, &program_path());
 
     // Setup accounts
     let admin = Pubkey::new_unique();
     let usdc_mint = Pubkey::new_unique();
+    let mint_authority = Pubkey::new_unique();
 
     // Derive PDAs
     let config_seeds = LotteryConfigSeeds;
@@ -32,13 +34,37 @@ fn test_initialize_lottery() -> Result<(), Box<dyn Error>> {
     let (treasury, _treasury_bump) =
         Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
 
+    // Create proper USDC mint account (6 decimals like USDC)
+    let mint_data = Mint {
+        mint_authority: COption::Some(mint_authority),
+        supply: 0,
+        decimals: 6,
+        is_initialized: true,
+        freeze_authority: COption::<Pubkey>::None,
+    };
+    let usdc_mint_account = token::create_account_for_mint(mint_data);
+
+    // Create treasury token account for USDC
+    let treasury_account_data = TokenAccountData {
+        mint: usdc_mint,
+        owner: treasury,
+        amount: 0,
+        delegate: COption::None,
+        state: AccountState::Initialized,
+        is_native: COption::None,
+        delegated_amount: 0,
+        close_authority: COption::None,
+    };
+    let treasury_token_account = token::create_account_for_token_account(treasury_account_data);
+
     // Create mollusk context with accounts
     let mollusk = mollusk.with_context(HashMap::from_iter([
         (admin, SolanaAccount::new(1_000_000_000, 0, &System::ID)),
         (lottery_config, SolanaAccount::new(0, 0, &System::ID)),
-        (treasury, SolanaAccount::new(0, 0, &System::ID)),
-        (usdc_mint, SolanaAccount::new(0, 0, &System::ID)),
+        (treasury, treasury_token_account),
+        (usdc_mint, usdc_mint_account),
         keyed_account_for_system_program(),
+        token::keyed_account(),
     ]));
 
     // Instruction args
@@ -73,9 +99,10 @@ fn test_initialize_lottery() -> Result<(), Box<dyn Error>> {
             InitializeLotteryClientAccounts {
                 admin,
                 lottery_config,
-                treasury,
                 usdc_mint,
+                treasury,
                 system_program: None,
+                token_program: None,
             },
         )?,
         &[
@@ -97,6 +124,7 @@ fn test_initialize_lottery_with_invalid_fee() -> Result<(), Box<dyn Error>> {
     // Setup accounts
     let admin = Pubkey::new_unique();
     let usdc_mint = Pubkey::new_unique();
+    let mint_authority = Pubkey::new_unique();
 
     // Derive PDAs
     let config_seeds = LotteryConfigSeeds;
@@ -107,13 +135,37 @@ fn test_initialize_lottery_with_invalid_fee() -> Result<(), Box<dyn Error>> {
     let (treasury, _treasury_bump) =
         Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
 
+    // Create proper USDC mint account (6 decimals like USDC)
+    let mint_data = Mint {
+        mint_authority: COption::Some(mint_authority),
+        supply: 0,
+        decimals: 6,
+        is_initialized: true,
+        freeze_authority: COption::<Pubkey>::None,
+    };
+    let usdc_mint_account = token::create_account_for_mint(mint_data);
+
+    // Create treasury token account for USDC
+    let treasury_account_data = TokenAccountData {
+        mint: usdc_mint,
+        owner: treasury,
+        amount: 0,
+        delegate: COption::None,
+        state: AccountState::Initialized, // Initialized
+        is_native: COption::None,
+        delegated_amount: 0,
+        close_authority: COption::None,
+    };
+    let treasury_token_account = token::create_account_for_token_account(treasury_account_data);
+
     // Create mollusk context with accounts
     let mollusk = mollusk.with_context(HashMap::from_iter([
         (admin, SolanaAccount::new(1_000_000_000, 0, &System::ID)),
         (lottery_config, SolanaAccount::new(0, 0, &System::ID)),
-        (treasury, SolanaAccount::new(0, 0, &System::ID)),
-        (usdc_mint, SolanaAccount::new(0, 0, &System::ID)),
+        (treasury, treasury_token_account),
+        (usdc_mint, usdc_mint_account),
         keyed_account_for_system_program(),
+        token::keyed_account(),
     ]));
 
     // Instruction args with INVALID fee (>= 10000 bps = 100%)
@@ -133,9 +185,10 @@ fn test_initialize_lottery_with_invalid_fee() -> Result<(), Box<dyn Error>> {
         InitializeLotteryClientAccounts {
             admin,
             lottery_config,
-            treasury,
             usdc_mint,
+            treasury,
             system_program: None,
+            token_program: None,
         },
     )?);
 

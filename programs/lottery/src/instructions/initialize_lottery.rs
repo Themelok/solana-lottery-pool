@@ -1,5 +1,6 @@
 use crate::states::*;
 use star_frame::prelude::*;
+use star_frame_spl::token::{state::MintAccount, state::TokenAccount, Token};
 
 // ============================================================================
 // Instruction Args
@@ -32,14 +33,15 @@ pub struct InitializeLotteryAccounts {
     #[validate(arg = (Create(()), Seeds(LotteryConfigSeeds)))]
     pub lottery_config: Init<Seeded<Account<LotteryConfig>>>,
 
-    /// Treasury PDA that will receive fees
-    /// CHECK: This is a PDA derived from TreasurySeeds
-    pub treasury: SystemAccount,
+    /// USDC mint address - validated as a proper SPL token mint
+    pub usdc_mint: MintAccount,
 
-    /// USDC mint address - we'll validate it's a valid mint
-    pub usdc_mint: SystemAccount,
+    /// Treasury token account - PDA that will hold USDC fees
+    /// This should be created beforehand as a token account owned by the treasury PDA
+    pub treasury: TokenAccount,
 
     pub system_program: Program<System>,
+    pub token_program: Program<Token>,
 }
 
 // ============================================================================
@@ -56,11 +58,18 @@ fn InitializeLottery(
         return Err(crate::SolanaLotteryPoolError::InvalidFeeConfig.into());
     }
 
-    // Calculate bump seeds for config and treasury PDAs
+    // Validate treasury is for the correct mint
+    let treasury_data = accounts.treasury.data()?;
+    if treasury_data.mint.pubkey() != accounts.usdc_mint.pubkey() {
+        return Err(ProgramError::InvalidAccountData.into());
+    }
+
+    // Calculate bump seeds for config PDA
     let config_seeds = LotteryConfigSeeds;
     let (_config_pda, config_bump) =
         Pubkey::find_program_address(&config_seeds.seeds(), &crate::SolanaLotteryPoolProgram::ID);
 
+    // Get treasury bump from its PDA derivation
     let treasury_seeds = TreasurySeeds;
     let (_treasury_pda, treasury_bump) = Pubkey::find_program_address(
         &treasury_seeds.seeds(),
