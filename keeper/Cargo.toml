@@ -1,0 +1,27 @@
+[package]
+name = "keeper"
+description = "Off-chain daemon for Solana Lottery Pool automation"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "keeper"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+borsh.workspace = true
+solana-sdk.workspace = true
+solana-client.workspace = true
+solana-program.workspace = true
+spl-token.workspace = true
+spl-associated-token-account.workspace = true
+
+# Keeper-specific dependencies
+tokio = { version = "1.42", features = ["full"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"

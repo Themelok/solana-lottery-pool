@@ -1,0 +1,36 @@
+[package]
+name = "solana-lottery-pool"
+description = "Built with Star Frame"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[package.metadata]
+release.release = false
+
+[lib]
+# Using only `cdylib` enables the compiler to optimize with LTO. If you need to use the library, make a separate lib crate
+# or add `rlib` here if the performance impact is acceptable.
+crate-type = ["cdylib"]
+name = "solana_lottery_pool"
+
+[features]
+no_entrypoint = []
+idl = ["star_frame/idl"]
+
+[dependencies]
+borsh.workspace = true
+bytemuck = { version = "^1.22.0", features = [
+    "extern_crate_std",
+    "min_const_generics",
+    "derive",
+] }
+star_frame = { version = "0.27.0" }
+solana-program.workspace = true
+spl-token.workspace = true
+spl-associated-token-account.workspace = true
+
+[dev-dependencies]
+codama-nodes = { version = "^0.4.0" }
+mollusk-svm = "0.7.0"
+solana-account = "3.0.0"

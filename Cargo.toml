@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "programs/lottery",
+    "keeper",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+# Shared dependencies for version consistency
+borsh = { version = "1.5.7", features = ["derive"] }
+solana-sdk = "2.1"
+solana-client = "2.1"
+solana-program = "2.1"
+spl-token = "6.0"
+spl-associated-token-account = "6.0"
+
+[profile.release]
+overflow-checks = true
+lto = "thin"
+codegen-units = 1
