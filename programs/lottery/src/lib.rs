@@ -1,9 +1,9 @@
-use star_frame::prelude::*;
 use instructions::*;
+use star_frame::prelude::*;
 
+mod errors;
 mod instructions;
 pub mod states;
-mod errors;
 
 // Re-export error type
 pub use errors::SolanaLotteryPoolError;
@@ -14,13 +14,13 @@ mod tests;
 #[derive(StarFrameProgram)]
 #[program(
     instruction_set = SolanaLotteryPoolInstructionSet,
-    id = "111FJo4zLAGU9nzTWa6EnbV4VAmtG4FR8kcokrtZYr"
+    id = "DmvwV2RNhdELbxn1nx5LVi6RexqKGDBoLJdWY9SGHjmP"
 )]
 pub struct SolanaLotteryPoolProgram;
 
 #[derive(InstructionSet)]
 pub enum SolanaLotteryPoolInstructionSet {
     InitializeLottery(InitializeLottery),
+    OpenNextRound(OpenNextRound),
     // TODO: Add remaining lottery instructions
 }
-
