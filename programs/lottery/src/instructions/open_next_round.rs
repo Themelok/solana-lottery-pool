@@ -104,8 +104,24 @@ fn OpenNextRound(accounts: &mut OpenNextRoundAccounts, args: OpenNextRoundArgs) 
     let vault_seeds = RoundVaultSeeds {
         round_id: args.round_id,
     };
-    let (_vault_pda, vault_bump) =
+    let (vault_pda, vault_bump) =
         Pubkey::find_program_address(&vault_seeds.seeds(), &crate::SolanaLotteryPoolProgram::ID);
+
+    // Verify vault PDA matches the provided account
+    ensure_eq!(
+        &vault_pda,
+        accounts.round_vault.pubkey(),
+        ProgramError::InvalidSeeds
+    );
+
+    // Validate round vault exists and is properly initialized
+    let vault_data = accounts.round_vault.data()?;
+    ensure_eq!(
+        vault_data.mint.pubkey(),
+        accounts.usdc_mint.pubkey(),
+        ProgramError::InvalidAccountData
+    );
+    ensure_eq!(&vault_data.owner, &vault_pda, ProgramError::IllegalOwner);
 
     // Get round PDA and verify it matches
     let round_seeds = RoundSeeds {

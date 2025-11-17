@@ -5167,6 +5167,7 @@ dependencies = [
  "solana-program",
  "solana-program-option 3.0.0",
  "solana-pubkey 2.4.0",
+ "spl-associated-token-account",
  "spl-token-interface",
  "star_frame",
  "star_frame_spl",
