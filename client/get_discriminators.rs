@@ -27,8 +27,8 @@ fn main() {
     let instructions = vec![
         "InitializeLottery",
         "OpenNextRound",
+        "BuyTicket",
         // Add future instructions here:
-        // "BuyTicket",
         // "CloseRound",
         // "FinalizeRound",
         // "Claim",

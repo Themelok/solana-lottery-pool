@@ -22,5 +22,6 @@ pub struct SolanaLotteryPoolProgram;
 pub enum SolanaLotteryPoolInstructionSet {
     InitializeLottery(InitializeLottery),
     OpenNextRound(OpenNextRound),
+    BuyTicket(BuyTicket),
     // TODO: Add remaining lottery instructions
 }

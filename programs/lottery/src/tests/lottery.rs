@@ -1029,3 +1029,325 @@ fn test_open_next_round_with_wrong_vault_mint() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+#[test]
+fn test_buy_ticket_success() -> Result<(), Box<dyn Error>> {
+    let mollusk = Mollusk::new(&SolanaLotteryPoolProgram::ID, &program_path());
+
+    // Setup accounts
+    let admin = Pubkey::new_unique();
+    let buyer = Pubkey::new_unique();
+    let usdc_mint = Pubkey::new_unique();
+    let mint_authority = Pubkey::new_unique();
+
+    // Derive PDAs
+    let config_seeds = LotteryConfigSeeds;
+    let (lottery_config, _config_bump) =
+        Pubkey::find_program_address(&config_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
+
+    let treasury_seeds = TreasurySeeds;
+    let (treasury_pda, _treasury_bump) =
+        Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
+
+    let treasury_ata = get_associated_token_address(&treasury_pda, &usdc_mint);
+
+    let round_id = 1u64;
+    let round_seeds = RoundSeeds { round_id };
+    let (round_pda, _round_bump) =
+        Pubkey::find_program_address(&round_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
+
+    let vault_seeds = RoundVaultSeeds { round_id };
+    let (round_vault_pda, _vault_bump) =
+        Pubkey::find_program_address(&vault_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
+
+    // Create buyer's USDC token account
+    let buyer_ata = get_associated_token_address(&buyer, &usdc_mint);
+
+    // Create USDC mint account
+    let mint_data = Mint {
+        mint_authority: COption::Some(mint_authority),
+        supply: 1_000_000_000, // 1000 USDC supply
+        decimals: 6,
+        is_initialized: true,
+        freeze_authority: COption::<Pubkey>::None,
+    };
+    let usdc_mint_account = token::create_account_for_mint(mint_data);
+
+    // Create buyer's token account with 100 USDC
+    let buyer_token_account_data = TokenAccountData {
+        mint: usdc_mint,
+        owner: buyer,
+        amount: 100_000_000, // 100 USDC
+        delegate: COption::None,
+        state: AccountState::Initialized,
+        is_native: COption::None,
+        delegated_amount: 0,
+        close_authority: COption::None,
+    };
+    let buyer_token_account = token::create_account_for_token_account(buyer_token_account_data);
+
+    // Create round vault token account
+    let round_vault_account_data = TokenAccountData {
+        mint: usdc_mint,
+        owner: round_vault_pda,
+        amount: 0,
+        delegate: COption::None,
+        state: AccountState::Initialized,
+        is_native: COption::None,
+        delegated_amount: 0,
+        close_authority: COption::None,
+    };
+    let round_vault_account = token::create_account_for_token_account(round_vault_account_data);
+
+    // Create lottery config with existing state
+    let ticket_price = 1_000_000u64; // 1 USDC
+    let lottery_config_data = LotteryConfig {
+        admin,
+        treasury: treasury_ata,
+        usdc_mint,
+        ticket_price,
+        default_duration: 300i64,
+        fee_bps: 500u16,
+        current_round_id: round_id,
+        bump: _config_bump,
+        treasury_bump: _treasury_bump,
+        _padding: [0; 6],
+    };
+    let mut lottery_config_account = SolanaAccount::new(
+        1_000_000,
+        LotteryConfig::serialize_account(lottery_config_data)?.len(),
+        &SolanaLotteryPoolProgram::ID,
+    );
+    lottery_config_account.data = LotteryConfig::serialize_account(lottery_config_data)?;
+
+    // Create round in Open status
+    let round_data = Round {
+        id: round_id,
+        start_time: 1_000_000,
+        end_time: 2_000_000, // Not expired yet
+        ticket_price,
+        total_tickets: 0,
+        pot_amount: 0,
+        winner: Pubkey::default(),
+        winner_ticket_index: 0,
+        randomness: 0,
+        status: RoundStatus::Open as u8,
+        vault_bump: _vault_bump,
+        bump: _round_bump,
+        _padding: [0; 5],
+    };
+    let mut round_account = SolanaAccount::new(
+        1_000_000,
+        Round::serialize_account(round_data)?.len(),
+        &SolanaLotteryPoolProgram::ID,
+    );
+    round_account.data = Round::serialize_account(round_data)?;
+
+    // Create mollusk context with accounts
+    let mollusk = mollusk.with_context(HashMap::from_iter([
+        (buyer, SolanaAccount::new(1_000_000_000, 0, &System::ID)),
+        (buyer_ata, buyer_token_account),
+        (lottery_config, lottery_config_account),
+        (round_pda, round_account),
+        (round_vault_pda, round_vault_account),
+        (usdc_mint, usdc_mint_account),
+        keyed_account_for_system_program(),
+        token::keyed_account(),
+    ]));
+
+    // Buy 5 tickets
+    let amount = 5u64;
+    let expected_cost = ticket_price * amount;
+
+    // Execute buy_ticket instruction
+    mollusk.process_and_validate_instruction(
+        &SolanaLotteryPoolProgram::instruction(
+            &BuyTicket {
+                args: BuyTicketArgs { amount, round_id },
+            },
+            BuyTicketClientAccounts {
+                buyer,
+                buyer_token_account: buyer_ata,
+                lottery_config,
+                round: round_pda,
+                round_vault: round_vault_pda,
+                usdc_mint,
+                token_program: None,
+            },
+        )?,
+        &[
+            Check::success(),
+            Check::account(&round_pda)
+                .data(&Round::serialize_account(Round {
+                    id: round_id,
+                    start_time: 1_000_000,
+                    end_time: 2_000_000,
+                    ticket_price,
+                    total_tickets: amount,
+                    pot_amount: expected_cost,
+                    winner: Pubkey::default(),
+                    winner_ticket_index: 0,
+                    randomness: 0,
+                    status: RoundStatus::Open as u8,
+                    vault_bump: _vault_bump,
+                    bump: _round_bump,
+                    _padding: [0; 5],
+                })?)
+                .build(),
+        ],
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_buy_ticket_round_closed() -> Result<(), Box<dyn Error>> {
+    let mollusk = Mollusk::new(&SolanaLotteryPoolProgram::ID, &program_path());
+
+    // Setup accounts
+    let admin = Pubkey::new_unique();
+    let buyer = Pubkey::new_unique();
+    let usdc_mint = Pubkey::new_unique();
+    let mint_authority = Pubkey::new_unique();
+
+    // Derive PDAs
+    let config_seeds = LotteryConfigSeeds;
+    let (lottery_config, _config_bump) =
+        Pubkey::find_program_address(&config_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
+
+    let treasury_seeds = TreasurySeeds;
+    let (treasury_pda, _treasury_bump) =
+        Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
+
+    let treasury_ata = get_associated_token_address(&treasury_pda, &usdc_mint);
+
+    let round_id = 1u64;
+    let round_seeds = RoundSeeds { round_id };
+    let (round_pda, _round_bump) =
+        Pubkey::find_program_address(&round_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
+
+    let vault_seeds = RoundVaultSeeds { round_id };
+    let (round_vault_pda, _vault_bump) =
+        Pubkey::find_program_address(&vault_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
+
+    let buyer_ata = get_associated_token_address(&buyer, &usdc_mint);
+
+    // Create USDC mint account
+    let mint_data = Mint {
+        mint_authority: COption::Some(mint_authority),
+        supply: 1_000_000_000,
+        decimals: 6,
+        is_initialized: true,
+        freeze_authority: COption::<Pubkey>::None,
+    };
+    let usdc_mint_account = token::create_account_for_mint(mint_data);
+
+    // Create buyer's token account
+    let buyer_token_account_data = TokenAccountData {
+        mint: usdc_mint,
+        owner: buyer,
+        amount: 100_000_000,
+        delegate: COption::None,
+        state: AccountState::Initialized,
+        is_native: COption::None,
+        delegated_amount: 0,
+        close_authority: COption::None,
+    };
+    let buyer_token_account = token::create_account_for_token_account(buyer_token_account_data);
+
+    // Create round vault token account
+    let round_vault_account_data = TokenAccountData {
+        mint: usdc_mint,
+        owner: round_vault_pda,
+        amount: 0,
+        delegate: COption::None,
+        state: AccountState::Initialized,
+        is_native: COption::None,
+        delegated_amount: 0,
+        close_authority: COption::None,
+    };
+    let round_vault_account = token::create_account_for_token_account(round_vault_account_data);
+
+    // Create lottery config
+    let ticket_price = 1_000_000u64;
+    let lottery_config_data = LotteryConfig {
+        admin,
+        treasury: treasury_ata,
+        usdc_mint,
+        ticket_price,
+        default_duration: 300i64,
+        fee_bps: 500u16,
+        current_round_id: round_id,
+        bump: _config_bump,
+        treasury_bump: _treasury_bump,
+        _padding: [0; 6],
+    };
+    let mut lottery_config_account = SolanaAccount::new(
+        1_000_000,
+        LotteryConfig::serialize_account(lottery_config_data)?.len(),
+        &SolanaLotteryPoolProgram::ID,
+    );
+    lottery_config_account.data = LotteryConfig::serialize_account(lottery_config_data)?;
+
+    // Create round in CLOSED status (not Open)
+    let round_data = Round {
+        id: round_id,
+        start_time: 1_000_000,
+        end_time: 2_000_000,
+        ticket_price,
+        total_tickets: 10,
+        pot_amount: 10_000_000,
+        winner: Pubkey::default(),
+        winner_ticket_index: 0,
+        randomness: 0,
+        status: RoundStatus::Closed as u8, // CLOSED status
+        vault_bump: _vault_bump,
+        bump: _round_bump,
+        _padding: [0; 5],
+    };
+    let mut round_account = SolanaAccount::new(
+        1_000_000,
+        Round::serialize_account(round_data)?.len(),
+        &SolanaLotteryPoolProgram::ID,
+    );
+    round_account.data = Round::serialize_account(round_data)?;
+
+    // Create mollusk context
+    let mollusk = mollusk.with_context(HashMap::from_iter([
+        (buyer, SolanaAccount::new(1_000_000_000, 0, &System::ID)),
+        (buyer_ata, buyer_token_account),
+        (lottery_config, lottery_config_account),
+        (round_pda, round_account),
+        (round_vault_pda, round_vault_account),
+        (usdc_mint, usdc_mint_account),
+        keyed_account_for_system_program(),
+        token::keyed_account(),
+    ]));
+
+    // Try to buy tickets - should fail because round is closed
+    let result = mollusk.process_instruction(&SolanaLotteryPoolProgram::instruction(
+        &BuyTicket {
+            args: BuyTicketArgs {
+                amount: 5,
+                round_id,
+            },
+        },
+        BuyTicketClientAccounts {
+            buyer,
+            buyer_token_account: buyer_ata,
+            lottery_config,
+            round: round_pda,
+            round_vault: round_vault_pda,
+            usdc_mint,
+            token_program: None,
+        },
+    )?);
+
+    // Should fail with RoundNotOpen error
+    assert!(
+        result.program_result.is_err(),
+        "Should fail when round is not open"
+    );
+
+    Ok(())
+}

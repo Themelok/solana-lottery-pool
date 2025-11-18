@@ -29,6 +29,8 @@ const INITIALIZE_LOTTERY_DISCRIMINATOR: [u8; 8] = [0x78, 0x8d, 0xf8, 0x2a, 0x5e,
 
 const OPEN_NEXT_ROUND_DISCRIMINATOR: [u8; 8] = [0x18, 0x36, 0x20, 0x4d, 0x74, 0xc9, 0x0f, 0xc6];
 
+const BUY_TICKET_DISCRIMINATOR: [u8; 8] = [0x58, 0x5f, 0xbc, 0x60, 0x8a, 0x5b, 0x1f, 0xd6];
+
 // ============================================================================
 // Instruction Args (must match program structs)
 // ============================================================================
@@ -44,6 +46,12 @@ struct InitializeLotteryArgs {
 struct OpenNextRoundArgs {
     duration_seconds: i64, // How long the round should run
     round_id: u64,         // Expected round ID (must match current_round_id + 1)
+}
+
+#[derive(BorshSerialize, Clone, Debug)]
+struct BuyTicketArgs {
+    amount: u64,   // Number of tickets to buy
+    round_id: u64, // Which round to buy tickets for
 }
 
 // ============================================================================
@@ -143,6 +151,40 @@ fn build_open_next_round_ix(
             AccountMeta::new_readonly(*usdc_mint, false), // usdc_mint
             AccountMeta::new_readonly(system_program_id(), false), // system_program
             AccountMeta::new_readonly(token_program_id, false), // token_program
+        ],
+        data,
+    }
+}
+
+/// Build BuyTicket instruction
+fn build_buy_ticket_ix(
+    buyer: &Pubkey,
+    buyer_token_account: &Pubkey,
+    usdc_mint: &Pubkey,
+    round_id: u64,
+    amount: u64,
+) -> Instruction {
+    let program_id = Pubkey::from_str(PROGRAM_ID).unwrap();
+    let (lottery_config, _) = find_lottery_config_pda(&program_id);
+    let (round, _) = find_round_pda(round_id, &program_id);
+    let (round_vault, _) = find_round_vault_pda(round_id, &program_id);
+
+    let args = BuyTicketArgs { amount, round_id };
+
+    // Serialize: discriminator + args
+    let mut data = BUY_TICKET_DISCRIMINATOR.to_vec();
+    data.extend_from_slice(&borsh_to_vec(&args).unwrap());
+
+    Instruction {
+        program_id,
+        accounts: vec![
+            AccountMeta::new(*buyer, true),                        // buyer (signer, funder)
+            AccountMeta::new(*buyer_token_account, false),         // buyer_token_account
+            AccountMeta::new_readonly(lottery_config, false),      // lottery_config
+            AccountMeta::new(round, false),                        // round
+            AccountMeta::new(round_vault, false),                  // round_vault
+            AccountMeta::new_readonly(*usdc_mint, false),          // usdc_mint
+            AccountMeta::new_readonly(token_program_id, false),    // token_program
         ],
         data,
     }
@@ -253,6 +295,38 @@ impl LotteryClient {
     pub fn get_round(&self, round_id: u64) -> (Pubkey, u8) {
         find_round_pda(round_id, &self.program_id)
     }
+
+    /// Buy tickets for a lottery round
+    pub fn buy_ticket(
+        &self,
+        usdc_mint: &Pubkey,
+        round_id: u64,
+        amount: u64,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let buyer = self.payer.pubkey();
+
+        // Get buyer's associated token account
+        let buyer_ata = get_associated_token_address(&buyer, usdc_mint);
+
+        let ix = build_buy_ticket_ix(&buyer, &buyer_ata, usdc_mint, round_id, amount);
+
+        let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
+        let tx = Transaction::new_signed_with_payer(
+            &[ix],
+            Some(&buyer),
+            &[&self.payer],
+            recent_blockhash,
+        );
+
+        let signature = self.rpc_client.send_and_confirm_transaction(&tx)?;
+
+        println!("🎫 Bought {} tickets for round {}!", amount, round_id);
+        println!("   Signature: {}", signature);
+        println!("   Buyer: {}", buyer);
+        println!("   Buyer ATA: {}", buyer_ata);
+
+        Ok(signature.to_string())
+    }
 }
 
 // ============================================================================
@@ -290,7 +364,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // )?;
 
     // Example 2: Open First Round
-    println!("\n=� Step 2: Open First Round");
+    println!("\n=> Step 2: Open First Round");
     println!("   Round ID: 1");
     println!("   Duration: 24 hours (86400 seconds)\n");
 
