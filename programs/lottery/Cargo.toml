@@ -29,6 +29,7 @@ star_frame = { version = "0.27.0" }
 star_frame_spl = { version = "0.27.0" }
 solana-program.workspace = true
 spl-associated-token-account = { version = "6.0", features = ["no-entrypoint"] }
+spl-associated-token-account-interface = "2.0.0"
 
 [dev-dependencies]
 codama-nodes = { version = "^0.4.0" }
@@ -37,4 +38,4 @@ mollusk-svm-programs-token = "0.7.0"
 solana-account = "3.0.0"
 spl-token-interface = "2.0"
 solana-program-option = "3.0"
-solana-pubkey = "2.0"
+solana-pubkey = "3.0"

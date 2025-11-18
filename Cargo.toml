@@ -1,9 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "programs/lottery",
-    "keeper",
-]
+members = ["programs/lottery", "keeper", "client"]
 
 [workspace.package]
 version = "0.0.1"
@@ -14,9 +11,9 @@ publish = false
 [workspace.dependencies]
 # Shared dependencies for version consistency
 borsh = { version = "1.5.7", features = ["derive"] }
-solana-sdk = "2.1"
-solana-client = "2.1"
-solana-program = "2.1"
+solana-sdk = "3.0"
+solana-client = "3.0"
+solana-program = "3.0"
 spl-token = "6.0"
 spl-associated-token-account = "6.0"
 

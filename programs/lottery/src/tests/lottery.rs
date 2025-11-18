@@ -1,11 +1,21 @@
-use crate::states::*;
-use crate::*;
+use crate::states::{
+    LotteryConfig, LotteryConfigSeeds, Round, RoundSeeds, RoundStatus, RoundVaultSeeds,
+    TreasurySeeds,
+};
+
+use crate::{instructions::*, SolanaLotteryPoolProgram};
 use mollusk_svm::{program::keyed_account_for_system_program, result::Check, Mollusk};
 use mollusk_svm_programs_token::token;
 use solana_account::Account as SolanaAccount;
 use solana_program_option::COption;
+use spl_associated_token_account_interface::address::get_associated_token_address;
 use spl_token_interface::state::{Account as TokenAccountData, AccountState, Mint};
-use star_frame::{client::MakeInstruction, prelude::Pubkey, program::StarFrameProgram};
+use star_frame::{
+    client::{DeserializeAccount, MakeInstruction, SerializeAccount},
+    prelude::{GetSeeds, Pubkey},
+    program::{system::System, StarFrameProgram},
+};
+
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
@@ -34,14 +44,7 @@ fn test_initialize_lottery() -> Result<(), Box<dyn Error>> {
     let (treasury_pda, _treasury_bump) =
         Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
 
-    // Derive treasury ATA from treasury_pda and usdc_mint
-    let treasury_pda_sp =
-        solana_program::pubkey::Pubkey::new_from_array(treasury_pda.as_ref().try_into().unwrap());
-    let usdc_mint_sp =
-        solana_program::pubkey::Pubkey::new_from_array(usdc_mint.as_ref().try_into().unwrap());
-    let treasury_ata_sp =
-        spl_associated_token_account::get_associated_token_address(&treasury_pda_sp, &usdc_mint_sp);
-    let treasury_ata = Pubkey::from(treasury_ata_sp.to_bytes());
+    let treasury_ata = get_associated_token_address(&treasury_pda, &usdc_mint);
 
     // Create proper USDC mint account (6 decimals like USDC)
     let mint_data = Mint {
@@ -154,15 +157,7 @@ fn test_initialize_lottery_with_invalid_fee() -> Result<(), Box<dyn Error>> {
     let treasury_seeds = TreasurySeeds;
     let (treasury_pda, _treasury_bump) =
         Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
-
-    // Derive treasury ATA from treasury_pda and usdc_mint
-    let treasury_pda_sp =
-        solana_program::pubkey::Pubkey::new_from_array(treasury_pda.as_ref().try_into().unwrap());
-    let usdc_mint_sp =
-        solana_program::pubkey::Pubkey::new_from_array(usdc_mint.as_ref().try_into().unwrap());
-    let treasury_ata_sp =
-        spl_associated_token_account::get_associated_token_address(&treasury_pda_sp, &usdc_mint_sp);
-    let treasury_ata = Pubkey::from(treasury_ata_sp.to_bytes());
+    let treasury_ata = get_associated_token_address(&treasury_pda, &usdc_mint);
 
     // Create proper USDC mint account (6 decimals like USDC)
     let mint_data = Mint {
@@ -260,13 +255,7 @@ fn test_open_next_round() -> Result<(), Box<dyn Error>> {
         Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
 
     // Derive treasury ATA from treasury_pda and usdc_mint
-    let treasury_pda_sp =
-        solana_program::pubkey::Pubkey::new_from_array(treasury_pda.as_ref().try_into().unwrap());
-    let usdc_mint_sp =
-        solana_program::pubkey::Pubkey::new_from_array(usdc_mint.as_ref().try_into().unwrap());
-    let treasury_ata_sp =
-        spl_associated_token_account::get_associated_token_address(&treasury_pda_sp, &usdc_mint_sp);
-    let treasury_ata = Pubkey::from(treasury_ata_sp.to_bytes());
+    let treasury_ata = get_associated_token_address(&treasury_pda, &usdc_mint);
 
     // Create proper USDC mint account
     let mint_data = Mint {
@@ -465,13 +454,7 @@ fn test_open_next_round_with_invalid_round_id() -> Result<(), Box<dyn Error>> {
         Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
 
     // Derive treasury ATA
-    let treasury_pda_sp =
-        solana_program::pubkey::Pubkey::new_from_array(treasury_pda.as_ref().try_into().unwrap());
-    let usdc_mint_sp =
-        solana_program::pubkey::Pubkey::new_from_array(usdc_mint.as_ref().try_into().unwrap());
-    let treasury_ata_sp =
-        spl_associated_token_account::get_associated_token_address(&treasury_pda_sp, &usdc_mint_sp);
-    let treasury_ata = Pubkey::from(treasury_ata_sp.to_bytes());
+    let treasury_ata = get_associated_token_address(&treasury_pda, &usdc_mint);
 
     // Create USDC mint
     let mint_data = Mint {
@@ -618,13 +601,7 @@ fn test_open_next_round_unauthorized() -> Result<(), Box<dyn Error>> {
         Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
 
     // Derive treasury ATA
-    let treasury_pda_sp =
-        solana_program::pubkey::Pubkey::new_from_array(treasury_pda.as_ref().try_into().unwrap());
-    let usdc_mint_sp =
-        solana_program::pubkey::Pubkey::new_from_array(usdc_mint.as_ref().try_into().unwrap());
-    let treasury_ata_sp =
-        spl_associated_token_account::get_associated_token_address(&treasury_pda_sp, &usdc_mint_sp);
-    let treasury_ata = Pubkey::from(treasury_ata_sp.to_bytes());
+    let treasury_ata = get_associated_token_address(&treasury_pda, &usdc_mint);
 
     // Create USDC mint
     let mint_data = Mint {
@@ -770,13 +747,7 @@ fn test_open_next_round_with_invalid_duration() -> Result<(), Box<dyn Error>> {
         Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
 
     // Derive treasury ATA
-    let treasury_pda_sp =
-        solana_program::pubkey::Pubkey::new_from_array(treasury_pda.as_ref().try_into().unwrap());
-    let usdc_mint_sp =
-        solana_program::pubkey::Pubkey::new_from_array(usdc_mint.as_ref().try_into().unwrap());
-    let treasury_ata_sp =
-        spl_associated_token_account::get_associated_token_address(&treasury_pda_sp, &usdc_mint_sp);
-    let treasury_ata = Pubkey::from(treasury_ata_sp.to_bytes());
+    let treasury_ata = get_associated_token_address(&treasury_pda, &usdc_mint);
 
     // Create USDC mint
     let mint_data = Mint {
@@ -922,13 +893,7 @@ fn test_open_next_round_with_wrong_vault_mint() -> Result<(), Box<dyn Error>> {
         Pubkey::find_program_address(&treasury_seeds.seeds(), &SolanaLotteryPoolProgram::ID);
 
     // Derive treasury ATA
-    let treasury_pda_sp =
-        solana_program::pubkey::Pubkey::new_from_array(treasury_pda.as_ref().try_into().unwrap());
-    let usdc_mint_sp =
-        solana_program::pubkey::Pubkey::new_from_array(usdc_mint.as_ref().try_into().unwrap());
-    let treasury_ata_sp =
-        spl_associated_token_account::get_associated_token_address(&treasury_pda_sp, &usdc_mint_sp);
-    let treasury_ata = Pubkey::from(treasury_ata_sp.to_bytes());
+    let treasury_ata = get_associated_token_address(&treasury_pda, &usdc_mint);
 
     // Create USDC mint
     let mint_data = Mint {

@@ -2,7 +2,7 @@ use instructions::*;
 use star_frame::prelude::*;
 
 mod errors;
-mod instructions;
+pub mod instructions;
 pub mod states;
 
 // Re-export error type
